@@ -1,0 +1,6 @@
+{
+    "package-name": "js-mandrillit",
+    "installed-apps": [
+        "mandrillit"
+    ]
+}

@@ -1,23 +1,24 @@
 from setuptools import setup, find_packages
 
-from emailit import __version__
+from mandrillit import __version__
 
 
 setup(
-    name="django-emailit",
+    name="js-mandrillit",
     version=__version__,
-    url='http://github.com/divio/django-emailit',
+    url='http://github.com/compoundpartners/js-mandrillit',
     license='BSD',
     platforms=['OS Independent'],
-    description="Make sending html emails easy.",
+    description="Make sending mandrill emails easy.",
     long_description=open('README.rst').read(),
-    author='Stefan Foulis',
-    author_email='stefan@foulis.ch',
+    author='Compound Partners Ltd',
+    author_email='hello@compoundpartners.co.uk',
     packages=find_packages(),
     install_requires=(
         'Django>=1.11',
         'premailer>=1.12',
         'django-absolute',
+        'mandrill',
     ),
     include_package_data=True,
     zip_safe=False,
