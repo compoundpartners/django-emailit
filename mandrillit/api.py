@@ -167,7 +167,7 @@ def send_mail(*args, **kwargs):
         if template_name:
             return mandrill_client.messages.send_template(
                 template_name=template_name,
-                template_content=[],
+                template_content=[{'name': 'main', 'content': message['html']}],
                 message=message,
                 async=False,
                 ip_pool='Main Pool',
