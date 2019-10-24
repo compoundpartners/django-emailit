@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import premailer
-from datetime import datetime
 
+from email.utils import parseaddr
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.core.mail import EmailMultiAlternatives
@@ -21,12 +21,12 @@ except NameError:
     basestring = str
 
 
-def construct_mail(recipients=None, context=None, template_base='mandrillit/email', subject=None, message=None, site=None,
+def construct_mailit_mail(recipients=None, context=None, template_base='mandrillit/email', subject=None, message=None, site=None,
                    subject_templates=None, body_templates=None, html_templates=None, from_email=None, language=None,
                    **kwargs):
     """
     usage:
-    construct_mail(['my@email.com'], {'my_obj': obj}, template_base='myapp/emails/my_obj_notification').send()
+    construct_mailit_mail(['my@email.com'], {'my_obj': obj}, template_base='myapp/emails/my_obj_notification').send()
     :param recipients: recipient or list of recipients
     :param context: context for template rendering
     :param template_base: the base template. '.subject.txt', '.body.txt' and '.body.html' will be added
@@ -88,12 +88,12 @@ def construct_mail(recipients=None, context=None, template_base='mandrillit/emai
     return mail
 
 
-def construct_mandrill_mail(recipients=None, context=None, template_base='mandrillit/email', subject=None, message=None, site=None,
+def construct_mail(recipients=None, context=None, template_base='mandrillit/email', subject=None, message=None, site=None,
                    subject_templates=None, body_templates=None, html_templates=None, from_email=None, language=None,
                    **kwargs):
     """
     usage:
-    construct_mail(['my@email.com'], {'my_obj': obj}, template_base='myapp/emails/my_obj_notification').send()
+    construct_mailit_mail(['my@email.com'], {'my_obj': obj}, template_base='myapp/emails/my_obj_notification').send()
     :param recipients: recipient or list of recipients
     :param context: context for template rendering
     :param template_base: the base template. '.subject.txt', '.body.txt' and '.body.html' will be added
@@ -114,8 +114,9 @@ def construct_mandrill_mail(recipients=None, context=None, template_base='mandri
         recipients = recipients or []
         if isinstance(recipients, basestring):
             recipients = [recipients]
-        message['to'] = [{'email': recipient, 'name': recipient, 'type': 'to'} for recipient in recipients]
-        message['from_email'] = from_email or settings.DEFAULT_FROM_EMAIL
+        message['to'] = [{'email': parseaddr(recipient)[1], 'name': parseaddr(recipient)[0], 'type': 'to'} for recipient in recipients]
+        from_email = parseaddr(from_email)
+        message['from_email'] = from_email[1] or settings.DEFAULT_FROM_EMAIL
         subject_templates = subject_templates or get_template_names(language, template_base, 'subject', 'txt')
         body_templates = body_templates or get_template_names(language, template_base, 'body', 'txt')
         html_templates = html_templates or get_template_names(language, template_base, 'body', 'html')
@@ -126,7 +127,7 @@ def construct_mandrill_mail(recipients=None, context=None, template_base='mandri
         site = site or Site.objects.get_current()
         context['site'] = site
         context['site_name'] = site.name
-        message['from_name'] = site.name
+        message['from_name'] = from_email[0] or site.name
         protocol = 'https'  # TODO: this should come from settings
         base_url = "%s://%s" % (protocol, site.domain)
         if message:
@@ -145,9 +146,8 @@ def construct_mandrill_mail(recipients=None, context=None, template_base='mandri
             html = render_to_string(html_templates, context)
         except TemplateDoesNotExist:
             html = linebreaks(body)
-        else:
-            html = premailer.transform(html, base_url=base_url)
         message['html'] = html
+        message['full_html'] = premailer.transform(html, base_url=base_url)
 
         if not (body or html):
             # this is so a meaningful exception can be raised
@@ -159,30 +159,34 @@ def construct_mandrill_mail(recipients=None, context=None, template_base='mandri
 
 def send_mail(*args, **kwargs):
     template_name = kwargs.pop('mandrill_template')
-    now = datetime.now()
-    message = construct_mandrill_mail(*args, **kwargs)
+    message = construct_mail(*args, **kwargs)
+    if not send_constructed_mail(message, template_name=template_name):
+        construct_mailit_mail(*args, **kwargs).send()
+
+def send_constructed_mail(message, template_name=None):
     try:
         mandrill_client = mandrill.Mandrill(settings.MANDRILL_API_KEY)
 
         if template_name:
+            del message['full_html']
             return mandrill_client.messages.send_template(
                 template_name=template_name,
                 template_content=[{'name': 'main', 'content': message['html']}],
                 message=message,
                 async=False,
                 ip_pool='Main Pool',
-                #send_at=now.strftime('%Y-%m-%d %H:%M:%S')
             )
         else:
+            message['html'] = message['full_html']
+            del message['full_html']
             return mandrill_client.messages.send(
                 message=message,
                 async=False,
                 ip_pool='Main Pool',
-                #send_at=now.strftime('%Y-%m-%d %H:%M:%S')
             )
     except mandrill.Error as e:
         print('A mandrill error occurred: %s - %s' % (e.__class__, e))
-        return construct_mail(*args, **kwargs).send()
+        return False
 
 
 def mail_admins(*args, **kwargs):
